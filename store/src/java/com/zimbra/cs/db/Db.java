@@ -3,6 +3,7 @@
  * Zimbra Collaboration Suite Server
  * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016 Synacor, Inc.
  *
+  *
  * This program is free software: you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software Foundation,
  * version 2 of the License.
@@ -13,7 +14,15 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  * ***** END LICENSE BLOCK *****
+
+ * Copyright (C) 2021, Forsgren Enterprises LLC
+ * This class implements Oracle Database as the main data store for the CS.  
+ *  Replacing open-source MariaDB/MySQL in Zimbra with an enterprise class database.
+ * Supports:  Oracle Multitenant (PDBs), Partitioning, Text, JSON Store
+ * Versions Supported/Tested:  Oracle 19c 19.10.0.0
+
  */
+
 package com.zimbra.cs.db;
 
 import java.sql.Connection;
@@ -49,26 +58,20 @@ public abstract class Db {
     }
 
     public static enum Capability {
+        ORACLE_PARTITIONING_OPTION, // when true, tables are built using hash partitioning for performance reasons
+        ORACLE_MULTITENANT_OPTION,  // when true, databases are created as PDBs
+        ORACLE_RAC_OPTION,          // when true, connection pool uses RAC-specific functionality
+        ORACLE_ADVANCEDSEC_OPTION,   // when true, use TDE to encrypt data in transit and at rest
+        ORACLE_JSON_STORE,          // when true, use Oracle JSON store for blob data (replacing Zimbra's on-disk store)
         BITWISE_OPERATIONS,
         BOOLEAN_DATATYPE,
         CASE_SENSITIVE_COMPARISON,
         CAST_AS_BIGINT,
         CLOB_COMPARISON,
         DISABLE_CONSTRAINT_CHECK,
-        FILE_PER_DATABASE,
-        LIMIT_CLAUSE,
-        MULTITABLE_UPDATE,
         NON_BMP_CHARACTERS,
-        ON_DUPLICATE_KEY,
-        ON_UPDATE_CASCADE,
-        READ_COMMITTED_ISOLATION,
-        REPLACE_INTO,
         ROW_LEVEL_LOCKING,
         UNIQUE_NAME_INDEX,
-        AVOID_OR_IN_WHERE_CLAUSE, // if set, then try to avoid ORs in WHERE clauses, run them as separate queries and mergesort in memory
-        REQUEST_UTF8_UNICODE_COLLATION, // for mysql
-        FORCE_INDEX_EVEN_IF_NO_SORT, // for derby
-        SQL_PARAM_LIMIT,
         DUMPSTER_TABLES;
     }
 
@@ -83,11 +86,11 @@ public abstract class Db {
                 try {
                     sDatabase = (Db) Class.forName(className).newInstance();
                 } catch (Exception e) {
-                    ZimbraLog.system.error("could not instantiate database configuration '" + className + "'; defaulting to MySQL", e);
+                    ZimbraLog.system.error("could not instantiate database configuration '" + className + "'; defaulting to Oracle", e);
                 }
             }
             if (sDatabase == null)
-                sDatabase = new MariaDB();
+                sDatabase = new OracleDB();
             ESCAPE_SEQUENCE = sDatabase.escapeSequence();
         }
         return sDatabase;
@@ -202,6 +205,8 @@ public abstract class Db {
         throw new UnsupportedOperationException("DB is not file-per-database");
     }
 
+    // TODO: this should be removed for Oracle edition 4/11/2021 pcf
+
     /** Generates the correct SQL to direct the current database engine to use
      *  a particular index to perform a SELECT query.  This string should come
      *  after the FROM clause and before the WHERE clause in the final SQL
@@ -233,6 +238,8 @@ public abstract class Db {
     public static int getINClauseBatchSize() {
         return getInstance().getInClauseBatchSize();
     }
+
+    // Oracle does not support boolean data type, use case statement 4/11/2021 PCF
 
     /** Generates a SELECT expression representing a BOOLEAN.  For databases
      *  that don't support a BOOLEAN datatype, returns an appropriate CASE
