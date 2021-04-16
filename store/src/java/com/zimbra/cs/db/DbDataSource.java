@@ -13,6 +13,9 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  * ***** END LICENSE BLOCK *****
+
+ * DigiCOPS Edition (C) Copyright 2021 Forsgren Enterprises LLC
+
  */
 package com.zimbra.cs.db;
 
@@ -95,14 +98,19 @@ public class DbDataSource {
                 conn = DbPool.getConnection(mbox);
             }
             StringBuilder sb = new StringBuilder();
-            sb.append("INSERT INTO ");
+            if (Db.supports(Db.Capability.MERGE_STATEMENT)) {
+                sb.append("MERGE INTO");
+            }
+            else {
+                   sb.append("INSERT INTO ");
+            }
             sb.append(getTableName(mbox));
             sb.append(" (");
             sb.append(DbMailItem.MAILBOX_ID);
             sb.append("data_source_id, item_id, folder_id, remote_id, metadata) VALUES (");
             sb.append(DbMailItem.MAILBOX_ID_VALUE);
             sb.append("?, ?, ?, ?, ?)");
-            if (Db.supports(Db.Capability.ON_DUPLICATE_KEY)) {
+            if (Db.supports(Db.Capability.MERGE_STATEMENT)) {
                 sb.append(" ON DUPLICATE KEY UPDATE data_source_id = ?, item_id = ?, folder_id = ?, remote_id = ?, metadata = ?");
             }
             stmt = conn.prepareStatement(sb.toString());
@@ -113,7 +121,7 @@ public class DbDataSource {
             stmt.setInt(i++, item.folderId);
             stmt.setString(i++, item.remoteId);
             stmt.setString(i++, DbMailItem.checkMetadataLength((item.md == null) ? null : item.md.toString()));
-            if (Db.supports(Db.Capability.ON_DUPLICATE_KEY)) {
+            if (Db.supports(Db.Capability.MERGE_STATEMENT)) {
                 stmt.setString(i++, dataSourceId);
                 stmt.setInt(i++, item.itemId);
                 stmt.setInt(i++, item.folderId);

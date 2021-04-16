@@ -13,6 +13,13 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  * ***** END LICENSE BLOCK *****
+
+ * ZCS DigiCOPS Edition
+ * (C) Copyright 2021 Forsgren Enterprises LLC
+ * 
+ * This module was rewritten to use the Oracle Universal Connection Pool, replacing the Apache DBCP pool.
+ * Reasoning:  Oracle UCP gives us Oracle-specific functionality such as RAC-awareness and failover beyond the Apache pool.
+
  */
 package com.zimbra.cs.db;
 
@@ -25,10 +32,10 @@ import java.sql.Statement;
 import java.util.Iterator;
 import java.util.Properties;
 
-import org.apache.commons.dbcp.ConnectionFactory;
-import org.apache.commons.dbcp.PoolableConnectionFactory;
-import org.apache.commons.dbcp.PoolingDataSource;
-import org.apache.commons.pool.impl.GenericObjectPool;
+// Oracle UCP imports
+import oracle.ucp.jdbc.PoolDataSourceFactory;
+import oracle.ucp.jdbc.PoolDataSource;
+
 
 import com.zimbra.common.localconfig.LC;
 import com.zimbra.common.service.ServiceException;
@@ -41,13 +48,13 @@ import com.zimbra.cs.stats.ZimbraPerf;
 
 /**
  * @since Apr 7, 2004
+   rewritten Apri 11, 2021 pcf to use Oracle UCP
  */
 public class DbPool {
 
-    private static PoolingDataSource sPoolingDataSource;
+    private static PoolDataSource sPoolDataSource;
     private static String sRootUrl;
     private static String sLoggerRootUrl;
-    private static GenericObjectPool sConnectionPool;
     private static boolean sIsInitialized;
 
     private static boolean isShutdown;
@@ -84,11 +91,13 @@ public class DbPool {
         /**
          * Disable foreign key constraint checking for this Connection.  Used by the mailbox restore code
          * so that it can do a LOAD DATA INFILE without hitting foreign key constraint troubles.
+         *
+         * 4/11/2021 rewritten to support Oracle PL/SQL procedure
          */
         public void disableForeignKeyConstraints() throws ServiceException {
             PreparedStatement stmt = null;
             try {
-                String sql = "SET FOREIGN_KEY_CHECKS=0";
+                String sql = "exec DISABLE_FK_CONSTRAINTS";
                 stmt = new StatTrackingPreparedStatement(connection.prepareStatement(sql),sql);
                 stmt.execute();
             } catch (SQLException e) {
@@ -98,14 +107,15 @@ public class DbPool {
             }
         }
 
+        // * 4/11/2021 rewritten to support Oracle PL/SQL procedure
         public void enableForeignKeyConstraints() throws ServiceException {
-            String sql = "SET FOREIGN_KEY_CHECKS=1";
+            String sql = "exec ENABLE_FK_CONSTRAINTS;";
             PreparedStatement stmt = null;
             try {
                 stmt = new StatTrackingPreparedStatement(connection.prepareStatement(sql), sql);
                 stmt.execute();
             } catch (SQLException e) {
-                throw ServiceException.FAILURE("disabling foreign key constraints", e);
+                throw ServiceException.FAILURE("enabling foreign key constraints", e);
             } finally {
                 DbPool.closeStatement(stmt);
             }
@@ -271,12 +281,12 @@ public class DbPool {
     }
 
     /** Initializes the connection pool. */
-    private static synchronized PoolingDataSource getPool() {
+    private static synchronized PoolDataSource getPool() {
         if (isShutdown)
             throw new RuntimeException("DbPool permanently shutdown");
 
-        if (sPoolingDataSource != null)
-            return sPoolingDataSource;
+        if (sPoolDataSource != null)
+            return sPoolDataSource;
 
         PoolConfig pconfig = Db.getInstance().getPoolConfig();
         sConnectionPool = new GenericObjectPool(null, pconfig.mPoolSize, pconfig.whenExhaustedAction, -1, pconfig.mPoolSize);
@@ -294,12 +304,12 @@ public class DbPool {
         }
 
         try {
-            PoolingDataSource pds = new PoolingDataSource(sConnectionPool);
+            PoolDataSource pds = new PoolDataSource(sConnectionPool);
             pds.setAccessToUnderlyingConnectionAllowed(true);
 
             Db.getInstance().startup(pds, pconfig.mPoolSize);
 
-            sPoolingDataSource = pds;
+            sPoolDataSource = pds;
         } catch (SQLException e) {
             ZimbraLog.system.fatal("can't initialize connection pool", e);
             System.exit(1);
@@ -422,8 +432,8 @@ public class DbPool {
      */
     public static DbConnection getMaintenanceConnection() throws ServiceException {
         try {
-            String user = LC.zimbra_mysql_user.value();
-            String pwd = LC.zimbra_mysql_password.value();
+            String user = LC.zimbra_oracle_user.value();
+            String pwd = LC.zimbra_oracle_password.value();
             Connection conn = DriverManager.getConnection(sRootUrl + "?user=" + user + "&password=" + pwd);
             conn.setAutoCommit(false);
             return new DbConnection(conn);

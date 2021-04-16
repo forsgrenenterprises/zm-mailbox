@@ -63,6 +63,7 @@ public abstract class Db {
         ORACLE_RAC_OPTION,          // when true, connection pool uses RAC-specific functionality
         ORACLE_ADVANCEDSEC_OPTION,   // when true, use TDE to encrypt data in transit and at rest
         ORACLE_JSON_STORE,          // when true, use Oracle JSON store for blob data (replacing Zimbra's on-disk store)
+        MERGE_STATEMENT,            // when true use MERGE statement (replaces MySQL-specific ON DUPLICATE KEY UPDATE)
         BITWISE_OPERATIONS,
         BOOLEAN_DATATYPE,
         CASE_SENSITIVE_COMPARISON,
