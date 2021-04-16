@@ -270,6 +270,8 @@ public class DbBlobConsistency {
         }
     }
 
+    // TODO: rewrite this section replacing MySQL export with Oracle syntax
+    
     public static void export(DbConnection conn, Mailbox mbox, String tableName,
                               String idColName, Multimap<Integer, Integer> idRevs, String path)
     throws ServiceException {
